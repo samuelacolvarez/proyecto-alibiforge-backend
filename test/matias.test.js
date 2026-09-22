@@ -27,10 +27,18 @@ function alibi(externalId, creatorId = "creator-1", alias = "Alias 1") {
 }
 
 before(async () => {
-  mongoServer = await MongoMemoryServer.create({
-    instance: { args: ["--nounixsocket"] },
-  });
-  await connectDB(mongoServer.getUri());
+  const mongoOptions =
+    process.platform === "linux"
+      ? {
+          instance: {
+            args: ["--nounixsocket"],
+          },
+        }
+      : {};
+
+  mongoServer = await MongoMemoryServer.create(mongoOptions);
+
+  await connectDB(mongoServer.getUri());;
   await Promise.all([
     Vote.syncIndexes(),
     Situation.syncIndexes(),
