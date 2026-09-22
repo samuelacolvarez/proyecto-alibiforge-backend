@@ -85,10 +85,10 @@ async function request(path, options = {}) {
   return { response, body: await response.json() };
 }
 
-test("responde el estado del backend de Persona B", async () => {
+test("responde el estado del backend de matias", async () => {
   const result = await request("/health");
   assert.equal(result.response.status, 200);
-  assert.equal(result.body.service, "alibiforge-persona-b");
+  assert.equal(result.body.service, "alibiforge-matias");
 });
 
 test("crea, lista, busca y consulta situaciones", async () => {

@@ -74,7 +74,7 @@ async function seed() {
     await recalculateAlibi(alibi.externalId);
   }
 
-  console.log("Datos independientes de Persona B creados correctamente.");
+  console.log("Datos independientes de matias creados correctamente.");
   await disconnectDB();
 }
 

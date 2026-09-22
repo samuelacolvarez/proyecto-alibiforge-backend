@@ -18,7 +18,7 @@ export function createApp() {
 
   app.get("/health", (_req, res) => res.json({ status: "ok" }));
   app.get("/api/health", (_req, res) =>
-    res.json({ status: "ok", service: "alibiforge-persona-b" })
+    res.json({ status: "ok", service: "alibiforge-matias" })
   );
 
   app.use("/api", situationsRouter);
