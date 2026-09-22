@@ -1,6 +1,8 @@
 import express from "express";
 import cors from "cors";
 
+import { notFoundHandler, errorHandler } from "./middleware/errorHandler.js";
+
 export function createApp() {
   const app = express();
 
@@ -13,6 +15,9 @@ export function createApp() {
   app.use(express.json());
 
   app.get("/health", (_req, res) => res.json({ status: "ok" }));
+
+  app.use(notFoundHandler);
+  app.use(errorHandler);
 
   return app;
 }
