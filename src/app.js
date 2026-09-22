@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 
+import authRoutes from "./routes/authRoutes.js";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler.js";
 
 export function createApp() {
@@ -15,6 +16,9 @@ export function createApp() {
   app.use(express.json());
 
   app.get("/health", (_req, res) => res.json({ status: "ok" }));
+
+  app.use("/auth", authRoutes);
+  app.use("/users", userRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
