@@ -5,6 +5,8 @@ import { reportsRouter } from "./routes/reports.js";
 import { situationsRouter } from "./routes/situations.js";
 import { votesRouter } from "./routes/votes.js";
 import { ApiError } from "./utils/ApiError.js";
+import swaggerUi from "swagger-ui-express"
+import { swaggerDocument } from "./config/swagger.js"
 
 export function createApp() {
   const app = express();
@@ -15,6 +17,16 @@ export function createApp() {
     })
   );
   app.use(express.json());
+
+  app.get("/api-docs.json", (_req, res) => {
+    res.json(swaggerDocument)
+  })
+
+  app.use(
+    "/api-docs",
+    swaggerUi.serve,
+    swaggerUi.setup(swaggerDocument)
+  );
 
   app.get("/health", (_req, res) => res.json({ status: "ok" }));
   app.get("/api/health", (_req, res) =>
