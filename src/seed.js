@@ -1,7 +1,8 @@
-// Seed data 
+// Seed data combinado: Persona A (usuarios, guilds, coartadas, testigos)
+// + Persona B (situaciones, votos, reportes de exposición)
 import "dotenv/config";
-import mongoose from "mongoose";
-import { connectDB } from "./config/db.js";
+import { connectDB, disconnectDB } from "./config/db.js";
+
 import { User } from "./models/User.js";
 import { Guild } from "./models/Guild.js";
 import { Alibi } from "./models/Alibi.js";
@@ -9,6 +10,13 @@ import { AlibiDetail } from "./models/AlibiDetail.js";
 import { Witness } from "./models/Witness.js";
 import { recalculateAlibiCounters } from "./services/alibiService.js";
 import { ALIBI_STATES } from "./utils/constants.js";
+
+import { ExposureReport } from "./models/ExposureReport.js";
+import { Situation } from "./models/Situation.js";
+import { Vote } from "./models/Vote.js";
+import { recalculateAlibi } from "./services/credibility.js";
+
+// ---------- Datos de Samuel ----------
 
 const GUILDS = [
   { name: "Los Improvisadores", description: "Excusas armadas sobre la marcha." },
@@ -79,7 +87,6 @@ const ALIBIS = [
     details: ["Captura del calendario", "Correo de la otra materia", "El otro profesor puede confirmarlo"] },
 ];
 
-// Índices de coartadas que tendrán cadena de testigos, y cuántos testigos
 const WITNESS_CHAINS = [
   { alibiIndex: 0, witnessCount: 4 },
   { alibiIndex: 1, witnessCount: 3 },
@@ -88,30 +95,58 @@ const WITNESS_CHAINS = [
   { alibiIndex: 4, witnessCount: 2 },
 ];
 
+// ------ Datos de Matías ----- 
+const aliases = [
+  "El Fantasma", "Mente Maestra", "Sombra Nocturna", "Agente Tarde", "La Estratega",
+  "Señor Incógnito", "La Coartada", "Profesor Excusas", "Nadie Me Vio",
+  "Plan Perfecto", "Último Minuto", "Testigo Secreto",
+];
+
+const situationData = [
+  ["Llegada tarde a clase", "Explica por qué llegaste tarde a clase."],
+  ["Entrega tardía", "Justifica por qué no entregaste el trabajo a tiempo."],
+  ["Ausencia en exposición", "Explica por qué no llegaste a la exposición."],
+  ["Cámara apagada", "Explica por qué no encendiste la cámara."],
+  ["Salida del laboratorio", "Explica por qué saliste antes de tiempo."],
+];
+
+function createCommunityAlibi(index) {
+  const creatorIndex = index % aliases.length;
+  return {
+    externalId: `alibi-${index + 1}`,
+    title: `Coartada comunitaria ${index + 1}`,
+    story: `Historia de prueba para la coartada número ${index + 1}.`,
+    creatorId: `creator-${creatorIndex + 1}`,
+    creatorAlias: aliases[creatorIndex],
+    witnessCount: index % 4,
+  };
+}
+
 async function seed() {
   await connectDB(process.env.MONGODB_URI);
 
-  console.log("Limpiando colecciones de Persona A...");
+  // ----- Limpieza -----
+  console.log("Limpiando colecciones...");
   await Promise.all([
     User.deleteMany({}),
     Guild.deleteMany({}),
     Alibi.deleteMany({}),
     AlibiDetail.deleteMany({}),
     Witness.deleteMany({}),
+    Situation.deleteMany({}),
+    Vote.deleteMany({}),
+    ExposureReport.deleteMany({}),
   ]);
 
+  // ----- Persona A: guilds, usuarios, coartadas, testigos -----
   console.log("Creando guilds...");
   const guilds = await Guild.insertMany(GUILDS);
 
   console.log("Creando usuarios (password de todos: password123)...");
   const users = [];
   for (const [index, data] of USERS.entries()) {
-    const user = new User({
-      ...data,
-      guild: guilds[index % guilds.length]._id,
-    });
+    const user = new User({ ...data, guild: guilds[index % guilds.length]._id });
     await user.setPassword("password123");
-    // El último usuario tiene credibilidad negativa: queda bloqueado
     if (data.credibilityScore < 0) {
       const until = new Date();
       until.setDate(until.getDate() + 7);
@@ -132,9 +167,7 @@ async function seed() {
       state: data.state,
       owner: owner._id,
     });
-    await AlibiDetail.insertMany(
-      data.details.map((text) => ({ alibi: alibi._id, text }))
-    );
+    await AlibiDetail.insertMany(data.details.map((text) => ({ alibi: alibi._id, text })));
     alibis.push(alibi);
   }
 
@@ -147,24 +180,51 @@ async function seed() {
     }
   }
 
-  console.log("Recalculando contadores...");
+  console.log("Recalculando contadores de Persona A...");
   for (const alibi of alibis) {
     await recalculateAlibiCounters(alibi._id);
+  }
+
+  // ----- situaciones, votos -----
+  console.log("Creando situaciones y votos...");
+  const communityAlibis = Array.from({ length: 15 }, (_, index) => createCommunityAlibi(index));
+
+  await Situation.insertMany(
+    situationData.map(([title, description], index) => ({
+      title,
+      description,
+      alibis: communityAlibis.slice(index * 3, index * 3 + 3),
+    }))
+  );
+
+  await Vote.insertMany(
+    Array.from({ length: 30 }, (_, index) => ({
+      alibiId: `alibi-${(index % 15) + 1}`,
+      voterId: `seed-voter-${index + 1}`,
+      credibility: (index % 5) + 1,
+      creativity: ((index + 1) % 5) + 1,
+      consistency: ((index + 2) % 5) + 1,
+    }))
+  );
+
+  for (const alibi of communityAlibis) {
+    await recalculateAlibi(alibi.externalId);
   }
 
   console.log(`
 Listo:
   ${guilds.length} guilds
   ${users.length} usuarios (password: password123)
-  ${alibis.length} coartadas
+  ${alibis.length} coartadas (Persona A)
   ${WITNESS_CHAINS.length} cadenas de testigos
+  ${situationData.length} situaciones y 30 votos (Persona B)
 `);
 
-  await mongoose.connection.close();
+  await disconnectDB();
 }
 
 seed().catch(async (error) => {
   console.error("Error en el seed:", error);
-  await mongoose.connection.close();
+  await disconnectDB();
   process.exit(1);
 });
