@@ -1,20 +1,21 @@
 import mongoose from "mongoose";
 import { idOf } from "../utils/ids.js";
 
-const exposureReportSchema = new mongoose.Schema(
+//un usuario pide que le ayuden con una coartada para una situación.
+const alibiRequestSchema = new mongoose.Schema(
   {
-    alibiId: {
+    situationId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Alibi",
+      ref: "Situation",
       required: true,
       index: true,
     },
-    reporterId: {
+    requester: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
-    reason: {
+    message: {
       type: String,
       trim: true,
       maxlength: 300,
@@ -24,19 +25,19 @@ const exposureReportSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Un usuario solo puede reportar una vez la misma coartada.
-exposureReportSchema.index({ alibiId: 1, reporterId: 1 }, { unique: true });
+// Un usuario hace una sola petición por situación.
+alibiRequestSchema.index({ situationId: 1, requester: 1 }, { unique: true });
 
-exposureReportSchema.set("toJSON", {
+alibiRequestSchema.set("toJSON", {
   virtuals: true,
   versionKey: false,
   transform: (_doc, ret) => {
     ret.id = ret._id.toString();
-    ret.alibiId = idOf(ret.alibiId);
-    ret.reporterId = idOf(ret.reporterId);
+    ret.situationId = idOf(ret.situationId);
+    ret.requester = idOf(ret.requester);
     delete ret._id;
     return ret;
   },
 });
 
-export const ExposureReport = mongoose.model("ExposureReport", exposureReportSchema);
+export const AlibiRequest = mongoose.model("AlibiRequest", alibiRequestSchema);

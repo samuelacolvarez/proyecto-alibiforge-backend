@@ -1,9 +1,11 @@
 import { Router } from "express";
+import { Alibi } from "../models/Alibi.js";
 import { Vote } from "../models/Vote.js";
-import { findCommunityAlibi } from "../services/alibiCommunity.js";
+import { requireAuth } from "../middleware/auth.js";
 import { recalculateAlibi } from "../services/credibility.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { ACTIVE_STATES, ALIBI_STATES } from "../utils/constants.js";
 
 export const votesRouter = Router();
 
@@ -11,47 +13,43 @@ function ratingIsValid(value) {
   return Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 5;
 }
 
-function voterId(body) {
-  return String(body.voterId || body.userId || body.visitorId || "").trim();
-}
-
 votesRouter.get(
   "/alibis/:id/votes",
   asyncHandler(async (req, res) => {
-    const communityData = await findCommunityAlibi(req.params.id);
+    const alibi = await Alibi.findById(req.params.id);
 
-    if (!communityData) {
-      throw ApiError.notFound("La coartada comunitaria no existe.");
+    if (!alibi) {
+      throw ApiError.notFound("Coartada no encontrada.");
     }
 
-    const votes = await Vote.find({ alibiId: String(req.params.id) })
-      .sort({ createdAt: -1 })
-      .lean();
+    const votes = await Vote.find({ alibiId: alibi._id }).sort({ createdAt: -1 });
 
     res.json({
-      votes,
-      credibilityIndex: communityData.alibi.credibilityIndex,
+      votes: votes.map((vote) => vote.toJSON()),
+      credibilityIndex: alibi.credibilityIndex,
+      averageScore: alibi.averageScore,
+      voteCount: alibi.voteCount,
     });
   })
 );
 
+//El votante es el usuario del JWT (no se acepta un id en el body).
 votesRouter.post(
   "/alibis/:id/votes",
+  requireAuth,
   asyncHandler(async (req, res) => {
-    const communityData = await findCommunityAlibi(req.params.id);
+    const alibi = await Alibi.findById(req.params.id);
 
-    if (!communityData) {
-      throw ApiError.notFound("La coartada comunitaria no existe.");
+    if (!alibi) {
+      throw ApiError.notFound("Coartada no encontrada.");
     }
-
-    if (communityData.alibi.exposed) {
-      throw ApiError.conflict("No se puede votar por una coartada expuesta.");
+    if (alibi.owner.toString() === req.user.id) {
+      throw ApiError.forbidden("No puedes votar tu propia coartada.");
     }
-
-    const normalizedVoterId = voterId(req.body);
-
-    if (!normalizedVoterId) {
-      throw ApiError.badRequest("Debes enviar voterId, userId o visitorId.");
+    if (alibi.exposed || !ACTIVE_STATES.includes(alibi.state)) {
+      throw ApiError.conflict(
+        "Solo se pueden votar coartadas enviadas que no estén rechazadas ni expuestas."
+      );
     }
 
     const ratingFields = ["credibility", "creativity", "consistency"];
@@ -62,28 +60,37 @@ votesRouter.post(
       );
     }
 
-    const previousVote = await Vote.exists({
-      alibiId: String(req.params.id),
-      voterId: normalizedVoterId,
-    });
+    const previousVote = await Vote.exists({ alibiId: alibi._id, voterId: req.user._id });
 
     if (previousVote) {
       throw ApiError.conflict("Ya votaste por esta coartada.");
     }
 
     const vote = await Vote.create({
-      alibiId: String(req.params.id),
-      voterId: normalizedVoterId,
+      alibiId: alibi._id,
+      voterId: req.user._id,
       credibility: Number(req.body.credibility),
       creativity: Number(req.body.creativity),
       consistency: Number(req.body.consistency),
     });
-    const credibilityIndex = await recalculateAlibi(req.params.id);
+
+    // El primer voto pasa la coartada de Submitted a UnderReview.
+    if (alibi.state === ALIBI_STATES.SUBMITTED) {
+      await Alibi.updateOne(
+        { _id: alibi._id, state: ALIBI_STATES.SUBMITTED },
+        { state: ALIBI_STATES.UNDER_REVIEW }
+      );
+    }
+
+    const updated = await recalculateAlibi(alibi._id);
 
     res.status(201).json({
       message: "Voto registrado correctamente.",
-      vote,
-      credibilityIndex,
+      vote: vote.toJSON(),
+      credibilityIndex: updated.credibilityIndex,
+      averageScore: updated.averageScore,
+      voteCount: updated.voteCount,
+      state: updated.state,
     });
   })
 );

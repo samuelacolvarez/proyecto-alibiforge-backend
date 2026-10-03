@@ -6,6 +6,8 @@ import {
   updateAlibi,
   submitAlibi,
   addDetail,
+  listVersions,
+  reviewAlibi,
 } from "../controllers/alibiController.js";
 import {
   listWitnesses,
@@ -51,11 +53,19 @@ const router = Router();
  *         application/json:
  *           schema:
  *             type: object
- *             required: [title, situation, story]
+ *             required: [title, story]
  *             properties:
  *               title: { type: string }
- *               situation: { type: string }
- *               story: { type: string }
+ *               situation: { type: string, description: "Obligatoria si no se envía situationId" }
+ *               situationId: { type: string, description: "Foro de situación al que pertenece" }
+ *               story: { type: string, maxLength: 500 }
+ *               details:
+ *                 type: array
+ *                 items: { type: string }
+ *               witnesses:
+ *                 type: array
+ *                 description: Ids o alias de los usuarios que respaldan la coartada
+ *                 items: { type: string }
  *     responses:
  *       201: { description: Coartada creada }
  *       403: { description: Usuario bloqueado por credibilidad negativa }
@@ -107,6 +117,24 @@ router.put("/:id", requireAuth, updateAlibi);
 
 /**
  * @swagger
+ * /alibis/{id}/versions:
+ *   get:
+ *     summary: Historial de versiones de la coartada
+ *     tags: [Alibis]
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Lista de versiones (number, title, story, details, createdAt) }
+ *       404: { description: No encontrada }
+ */
+router.get("/:id/versions", listVersions);
+
+/**
+ * @swagger
  * /alibis/{id}/submit:
  *   post:
  *     summary: Enviar la coartada a revisión (Draft -> Submitted)
@@ -121,6 +149,34 @@ router.put("/:id", requireAuth, updateAlibi);
  *       400: { description: Faltan detalles mínimos o transición inválida }
  */
 router.post("/:id/submit", requireAuth, submitAlibi);
+
+/**
+ * @swagger
+ * /alibis/{id}/review:
+ *   post:
+ *     summary: Revisar una coartada (cualquier usuario que no sea el dueño)
+ *     description: review = Submitted -> UnderReview; approve = UnderReview -> Approved; reject = Submitted/UnderReview/Approved -> Rejected.
+ *     tags: [Alibis]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [decision]
+ *             properties:
+ *               decision: { type: string, enum: [review, approve, reject] }
+ *     responses:
+ *       200: { description: Coartada con el estado nuevo }
+ *       400: { description: Transición inválida }
+ *       403: { description: No puedes revisar tu propia coartada }
+ */
+router.post("/:id/review", requireAuth, reviewAlibi);
 
 /**
  * @swagger

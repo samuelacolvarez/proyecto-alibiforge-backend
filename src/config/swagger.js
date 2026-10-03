@@ -1,13 +1,16 @@
 import swaggerJsdoc from "swagger-jsdoc";
 
+// Un solo documento OpenAPI para todo el backend:
+//  - Auth, usuarios y coartadas se documentan con comentarios @swagger en src/routes/*.js
+//  - Situaciones, votos, reportes y rankings (prefijo /api) se documentan abajo.
 const options = {
   definition: {
     openapi: "3.0.0",
     info: {
-      title: "AlibiForge API — Identidad y Coartadas (Persona A)",
+      title: "AlibiForge API",
       version: "1.0.0",
       description:
-        "Endpoints de autenticación, perfil, coartadas y cadena de testigos.",
+        "Autenticación, perfil, coartadas, cadena de testigos, votos, reportes, situaciones y rankings.",
     },
     servers: [
       {
@@ -23,379 +26,243 @@ const options = {
           bearerFormat: "JWT",
         },
       },
+      schemas: {
+        Rating: { type: "integer", minimum: 1, maximum: 5, example: 4 },
+        VoteInput: {
+          type: "object",
+          required: ["credibility", "creativity", "consistency"],
+          properties: {
+            credibility: { $ref: "#/components/schemas/Rating" },
+            creativity: { $ref: "#/components/schemas/Rating" },
+            consistency: { $ref: "#/components/schemas/Rating" },
+          },
+        },
+        Vote: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            alibiId: { type: "string" },
+            voterId: { type: "string" },
+            credibility: { $ref: "#/components/schemas/Rating" },
+            creativity: { $ref: "#/components/schemas/Rating" },
+            consistency: { $ref: "#/components/schemas/Rating" },
+          },
+        },
+        SituationAlibi: {
+          type: "object",
+          description: "Coartada de una situación, con su Credibility Index.",
+          properties: {
+            id: { type: "string" },
+            title: { type: "string" },
+            state: { type: "string", enum: ["Submitted", "UnderReview", "Approved"] },
+            credibilityIndex: { type: "number", example: 54 },
+            witnessCount: { type: "integer" },
+            complexityScore: { type: "integer" },
+            creatorId: { type: "string" },
+            creatorAlias: { type: "string" },
+          },
+        },
+        Situation: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            title: { type: "string" },
+            description: { type: "string" },
+            createdBy: { type: "string", nullable: true },
+            alibiCount: { type: "integer" },
+            alibis: {
+              type: "array",
+              description: "Ordenadas por credibilityIndex (de mayor a menor).",
+              items: { $ref: "#/components/schemas/SituationAlibi" },
+            },
+          },
+        },
+        RankingRow: {
+          type: "object",
+          properties: {
+            id: { type: "string", description: "Id del usuario" },
+            alias: { type: "string" },
+            score: { type: "number" },
+          },
+        },
+      },
     },
     security: [{ bearerAuth: [] }],
   },
   apis: ["./src/routes/*.js"],
 };
 
-export const swaggerSpec = swaggerJsdoc(options);
+const idParam = {
+  in: "path",
+  name: "id",
+  required: true,
+  schema: { type: "string" },
+};
 
-// Documentación del módulo de Persona B (situaciones, votos, reportes, rankings)
-export const swaggerDocument = {
-  openapi: "3.0.3",
-  info: {
-    title: "AlibiForge API - Matias",
-    version: "1.0.0",
-    description:
-      "API independiente de Matias para situaciones, votos, reportes y rankings.",
-  },
-  servers: [
-    {
-      url: "http://localhost:4000",
-      description: "Servidor local",
-    },
-  ],
-  tags: [
-    { name: "Estado", description: "Estado del servicio" },
-    { name: "Situaciones", description: "Administración de situaciones" },
-    { name: "Votos", description: "Votación de coartadas comunitarias" },
-    { name: "Reportes", description: "Reportes de coartadas falsas" },
-    { name: "Rankings", description: "Clasificaciones de la comunidad" },
-  ],
-  paths: {
-    "/api/health": {
-      get: {
-        tags: ["Estado"],
-        summary: "Consultar el estado del backend",
-        responses: {
-          200: {
-            description: "El servicio está funcionando",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/Health" },
-              },
-            },
-          },
-        },
-      },
-    },
-    "/api/situations": {
-      get: {
-        tags: ["Situaciones"],
-        summary: "Listar o buscar situaciones",
-        parameters: [
-          {
-            name: "search",
-            in: "query",
-            required: false,
-            description: "Texto que debe aparecer en el título",
-            schema: { type: "string" },
-          },
-        ],
-        responses: {
-          200: {
-            description: "Listado de situaciones",
-            content: {
-              "application/json": {
-                schema: {
-                  type: "array",
-                  items: { $ref: "#/components/schemas/Situation" },
-                },
-              },
-            },
-          },
-        },
-      },
-      post: {
-        tags: ["Situaciones"],
-        summary: "Crear una situación",
-        requestBody: {
-          required: true,
+const swaggerSpec = swaggerJsdoc(options);
+
+swaggerSpec.tags = [
+  ...(swaggerSpec.tags || []),
+  { name: "Situaciones", description: "Foro de situaciones y peticiones de coartadas" },
+  { name: "Votos", description: "Votación de coartadas (requiere sesión)" },
+  { name: "Reportes", description: "Exposición de coartadas falsas (requiere sesión)" },
+  { name: "Rankings", description: "Maestros del engaño" },
+];
+
+swaggerSpec.paths = {
+  ...swaggerSpec.paths,
+  "/api/situations": {
+    get: {
+      tags: ["Situaciones"],
+      summary: "Listar situaciones con sus mejores coartadas",
+      security: [],
+      parameters: [{ in: "query", name: "search", schema: { type: "string" } }],
+      responses: {
+        200: {
+          description: "Situaciones; cada una trae `alibis` ordenadas por Credibility Index",
           content: {
             "application/json": {
-              schema: { $ref: "#/components/schemas/CreateSituation" },
+              schema: { type: "array", items: { $ref: "#/components/schemas/Situation" } },
             },
           },
-        },
-        responses: {
-          201: {
-            description: "Situación creada correctamente",
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  properties: {
-                    message: { type: "string" },
-                    situation: { $ref: "#/components/schemas/Situation" },
-                  },
-                },
-              },
-            },
-          },
-          400: { $ref: "#/components/responses/BadRequest" },
         },
       },
     },
-    "/api/situations/{id}": {
-      get: {
-        tags: ["Situaciones"],
-        summary: "Consultar una situación por id",
-        parameters: [{ $ref: "#/components/parameters/SituationId" }],
-        responses: {
-          200: {
-            description: "Situación encontrada",
-            content: {
-              "application/json": {
-                schema: { $ref: "#/components/schemas/Situation" },
-              },
-            },
-          },
-          404: { $ref: "#/components/responses/NotFound" },
-        },
-      },
-    },
-    "/api/alibis/{id}/votes": {
-      get: {
-        tags: ["Votos"],
-        summary: "Consultar los votos de una coartada",
-        parameters: [{ $ref: "#/components/parameters/AlibiId" }],
-        responses: {
-          200: {
-            description: "Votos e índice de credibilidad",
-            content: {
-              "application/json": {
-                schema: {
-                  type: "object",
-                  properties: {
-                    votes: {
-                      type: "array",
-                      items: { $ref: "#/components/schemas/Vote" },
-                    },
-                    credibilityIndex: { type: "number", minimum: 0, maximum: 5 },
-                  },
-                },
-              },
-            },
-          },
-          404: { $ref: "#/components/responses/NotFound" },
-        },
-      },
-      post: {
-        tags: ["Votos"],
-        summary: "Registrar un voto",
-        parameters: [{ $ref: "#/components/parameters/AlibiId" }],
-        requestBody: {
-          required: true,
-          content: {
-            "application/json": {
-              schema: { $ref: "#/components/schemas/CreateVote" },
-            },
-          },
-        },
-        responses: {
-          201: { description: "Voto registrado y credibilidad recalculada" },
-          400: { $ref: "#/components/responses/BadRequest" },
-          404: { $ref: "#/components/responses/NotFound" },
-          409: { $ref: "#/components/responses/Conflict" },
-        },
-      },
-    },
-    "/api/alibis/{id}/report": {
-      post: {
-        tags: ["Reportes"],
-        summary: "Reportar una coartada como falsa",
-        parameters: [{ $ref: "#/components/parameters/AlibiId" }],
-        requestBody: {
-          required: true,
-          content: {
-            "application/json": {
-              schema: { $ref: "#/components/schemas/CreateReport" },
-            },
-          },
-        },
-        responses: {
-          201: { description: "Reporte registrado y reglas de exposición aplicadas" },
-          400: { $ref: "#/components/responses/BadRequest" },
-          404: { $ref: "#/components/responses/NotFound" },
-          409: { $ref: "#/components/responses/Conflict" },
-        },
-      },
-    },
-    "/api/rankings/{type}": {
-      get: {
-        tags: ["Rankings"],
-        summary: "Consultar un ranking",
-        parameters: [
-          {
-            name: "type",
-            in: "path",
-            required: true,
+    post: {
+      tags: ["Situaciones"],
+      summary: "Crear una situación (requiere sesión)",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
             schema: {
-              type: "string",
-              enum: [
-                "master-of-deceit",
-                "most-creative",
-                "most-consistent",
-                "most-wanted",
-              ],
+              type: "object",
+              required: ["title", "description"],
+              properties: { title: { type: "string" }, description: { type: "string" } },
             },
           },
-        ],
-        responses: {
-          200: {
-            description: "Ranking ordenado de mayor a menor puntuación",
-            content: {
-              "application/json": {
-                schema: {
-                  type: "array",
-                  items: { $ref: "#/components/schemas/RankingEntry" },
-                },
-              },
-            },
-          },
-          404: { $ref: "#/components/responses/NotFound" },
         },
+      },
+      responses: {
+        201: { description: "Situación creada" },
+        401: { description: "Falta el token" },
       },
     },
   },
-  components: {
-    parameters: {
-      SituationId: {
-        name: "id",
-        in: "path",
-        required: true,
-        description: "ObjectId de MongoDB de la situación",
-        schema: { type: "string", example: "66c000000000000000000001" },
-      },
-      AlibiId: {
-        name: "id",
-        in: "path",
-        required: true,
-        description: "Identificador externo de la coartada comunitaria",
-        schema: { type: "string", example: "alibi-001" },
+  "/api/situations/{id}": {
+    get: {
+      tags: ["Situaciones"],
+      summary: "Detalle de una situación con todas sus coartadas ordenadas por índice",
+      security: [],
+      parameters: [idParam],
+      responses: {
+        200: {
+          description: "Situación",
+          content: { "application/json": { schema: { $ref: "#/components/schemas/Situation" } } },
+        },
+        404: { description: "No existe" },
       },
     },
-    responses: {
-      BadRequest: {
-        description: "Datos inválidos",
+  },
+  "/api/situations/{id}/requests": {
+    get: {
+      tags: ["Situaciones"],
+      summary: "Peticiones de coartada hechas para la situación",
+      security: [],
+      parameters: [idParam],
+      responses: { 200: { description: "Lista de peticiones" } },
+    },
+    post: {
+      tags: ["Situaciones"],
+      summary: "Pedir una coartada para esta situación (requiere sesión)",
+      parameters: [idParam],
+      requestBody: {
         content: {
           "application/json": {
-            schema: { $ref: "#/components/schemas/Error" },
+            schema: { type: "object", properties: { message: { type: "string", maxLength: 300 } } },
           },
         },
       },
-      NotFound: {
-        description: "Recurso no encontrado",
-        content: {
-          "application/json": {
-            schema: { $ref: "#/components/schemas/Error" },
-          },
-        },
-      },
-      Conflict: {
-        description: "Operación duplicada o no permitida",
-        content: {
-          "application/json": {
-            schema: { $ref: "#/components/schemas/Error" },
-          },
-        },
+      responses: {
+        201: { description: "Petición registrada" },
+        409: { description: "Ya pediste una coartada para esta situación" },
       },
     },
-    schemas: {
-      Health: {
-        type: "object",
-        properties: {
-          status: { type: "string", example: "ok" },
-          service: { type: "string", example: "alibiforge-persona-b" },
-        },
+  },
+  "/api/alibis/{id}/votes": {
+    get: {
+      tags: ["Votos"],
+      summary: "Votos de una coartada y su Credibility Index",
+      security: [],
+      parameters: [idParam],
+      responses: { 200: { description: "{ votes, credibilityIndex, averageScore, voteCount }" } },
+    },
+    post: {
+      tags: ["Votos"],
+      summary: "Votar una coartada (un voto por usuario; el votante sale del JWT)",
+      parameters: [idParam],
+      requestBody: {
+        required: true,
+        content: { "application/json": { schema: { $ref: "#/components/schemas/VoteInput" } } },
       },
-      CommunityAlibi: {
-        type: "object",
-        required: ["externalId", "title", "story", "creatorId", "creatorAlias"],
-        properties: {
-          externalId: { type: "string", example: "alibi-001" },
-          title: { type: "string", maxLength: 120 },
-          story: { type: "string", maxLength: 500 },
-          creatorId: { type: "string", example: "user-001" },
-          creatorAlias: { type: "string", example: "Sombra Azul" },
-          witnessCount: { type: "integer", minimum: 0, default: 0 },
-          credibilityIndex: { type: "number", minimum: 0, maximum: 5, default: 0 },
-          exposed: { type: "boolean", default: false },
-          reportCount: { type: "integer", minimum: 0, default: 0 },
-          penaltyPoints: { type: "number", default: 0 },
-          penaltyApplied: { type: "boolean", default: false },
-        },
+      responses: {
+        201: { description: "Voto registrado; el primer voto pasa Submitted a UnderReview" },
+        400: { description: "Calificaciones inválidas" },
+        401: { description: "Falta el token" },
+        403: { description: "No puedes votar tu propia coartada" },
+        409: { description: "Ya votaste, o la coartada no es votable" },
       },
-      Situation: {
-        type: "object",
-        properties: {
-          _id: { type: "string" },
-          title: { type: "string" },
-          description: { type: "string" },
-          alibis: {
-            type: "array",
-            items: { $ref: "#/components/schemas/CommunityAlibi" },
+    },
+  },
+  "/api/alibis/{id}/report": {
+    post: {
+      tags: ["Reportes"],
+      summary: "Reportar una coartada como falsa (3 reportes la exponen)",
+      parameters: [idParam],
+      requestBody: {
+        content: {
+          "application/json": {
+            schema: { type: "object", properties: { reason: { type: "string", maxLength: 300 } } },
           },
-          createdAt: { type: "string", format: "date-time" },
-          updatedAt: { type: "string", format: "date-time" },
         },
       },
-      CreateSituation: {
-        type: "object",
-        required: ["title", "description"],
-        properties: {
-          title: { type: "string", maxLength: 120, example: "Llegué tarde al trabajo" },
-          description: {
+      responses: {
+        201: { description: "Reporte registrado; con 3 reportes pasa a Rejected y penaliza al creador (-10)" },
+        401: { description: "Falta el token" },
+        403: { description: "No puedes reportar tu propia coartada" },
+        409: { description: "Ya reportaste esta coartada, o no es reportable" },
+      },
+    },
+  },
+  "/api/rankings/{type}": {
+    get: {
+      tags: ["Rankings"],
+      summary: "Ranking de maestros del engaño",
+      security: [],
+      parameters: [
+        {
+          in: "path",
+          name: "type",
+          required: true,
+          schema: {
             type: "string",
-            maxLength: 1000,
-            example: "Crea una coartada convincente para justificar el retraso.",
-          },
-          alibis: {
-            type: "array",
-            items: { $ref: "#/components/schemas/CommunityAlibi" },
-            default: [],
+            enum: ["master-of-deceit", "most-creative", "most-consistent", "most-wanted"],
           },
         },
-      },
-      Vote: {
-        type: "object",
-        properties: {
-          _id: { type: "string" },
-          alibiId: { type: "string" },
-          voterId: { type: "string" },
-          credibility: { type: "integer", minimum: 1, maximum: 5 },
-          creativity: { type: "integer", minimum: 1, maximum: 5 },
-          consistency: { type: "integer", minimum: 1, maximum: 5 },
-          createdAt: { type: "string", format: "date-time" },
-        },
-      },
-      CreateVote: {
-        type: "object",
-        required: ["voterId", "credibility", "creativity", "consistency"],
-        properties: {
-          voterId: { type: "string", example: "visitor-001" },
-          credibility: { type: "integer", minimum: 1, maximum: 5, example: 4 },
-          creativity: { type: "integer", minimum: 1, maximum: 5, example: 5 },
-          consistency: { type: "integer", minimum: 1, maximum: 5, example: 4 },
-        },
-      },
-      CreateReport: {
-        type: "object",
-        required: ["reporterId"],
-        properties: {
-          reporterId: { type: "string", example: "visitor-002" },
-          reason: {
-            type: "string",
-            maxLength: 300,
-            example: "La historia contradice los detalles publicados.",
+      ],
+      responses: {
+        200: {
+          description: "Ranking ordenado de mayor a menor",
+          content: {
+            "application/json": {
+              schema: { type: "array", items: { $ref: "#/components/schemas/RankingRow" } },
+            },
           },
         },
-      },
-      RankingEntry: {
-        type: "object",
-        properties: {
-          id: { type: "string", example: "user-001" },
-          alias: { type: "string", example: "Sombra Azul" },
-          score: { type: "number", example: 4.5 },
-        },
-      },
-      Error: {
-        type: "object",
-        properties: {
-          message: { type: "string" },
-        },
+        404: { description: "El tipo de ranking no existe" },
       },
     },
   },
 };
+
+export { swaggerSpec };

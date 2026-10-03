@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import swaggerUi from "swagger-ui-express";
 
-import { swaggerSpec, swaggerDocument } from "./config/swagger.js";
+import { swaggerSpec } from "./config/swagger.js";
 
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
@@ -33,7 +33,7 @@ export function createApp() {
 
   // Rutas de situaciones, votos, reportes, rankings
   app.get("/api/health", (_req, res) =>
-    res.json({ status: "ok", service: "alibiforge-matias" })
+    res.json({ status: "ok", service: "alibiforge" })
   );
   app.use("/api", situationsRouter);
   app.use("/api", votesRouter);
@@ -42,8 +42,8 @@ export function createApp() {
 
   // Documentación interactiva
   app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-  app.get("/api-docs.json", (_req, res) => res.json(swaggerDocument));
-  app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+  app.get("/api-docs.json", (_req, res) => res.json(swaggerSpec));
+  app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
   app.use(notFoundHandler);
   app.use(errorHandler);

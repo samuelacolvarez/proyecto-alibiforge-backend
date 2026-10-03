@@ -1,35 +1,43 @@
+import { Alibi } from "../models/Alibi.js";
 import { ExposureReport } from "../models/ExposureReport.js";
 import {
-  findCommunityAlibi,
-  updateCommunityAlibi,
-} from "./alibiCommunity.js";
+  ALIBI_STATES,
+  EXPOSURE_PENALTY,
+  EXPOSURE_THRESHOLD,
+} from "../utils/constants.js";
+import { applyCredibilityChange } from "./userService.js";
 
-const EXPOSURE_THRESHOLD = 3;
-const EXPOSURE_PENALTY = -10;
-
+// Req. 18 y 19: con 3+ reportes la coartada queda expuesta (Rejected, índice 0)
+// y el creador pierde 10 puntos UNA sola vez.
 export async function applyExposureRules(alibiId) {
-  const reportCount = await ExposureReport.countDocuments({
-    alibiId: String(alibiId),
-  });
-  const communityData = await findCommunityAlibi(alibiId);
+  const reportCount = await ExposureReport.countDocuments({ alibiId });
 
-  if (!communityData) {
-    return null;
+  if (reportCount < EXPOSURE_THRESHOLD) {
+    await Alibi.updateOne({ _id: alibiId }, { reportCount });
+    return { reportCount, isExposed: false, penaltyApplied: false };
   }
 
-  const isExposed = reportCount >= EXPOSURE_THRESHOLD;
-  const penaltyWasApplied = communityData.alibi.penaltyApplied;
-  const penaltyApplied = isExposed && !penaltyWasApplied;
+  // Cambio atómico: solo la petición que pasa penaltyApplied de false a true
+  // recibe el documento anterior y aplica la penalización.
+  const previous = await Alibi.findOneAndUpdate(
+    { _id: alibiId, penaltyApplied: false },
+    {
+      $set: {
+        reportCount,
+        exposed: true,
+        penaltyApplied: true,
+        state: ALIBI_STATES.REJECTED,
+        credibilityIndex: 0,
+      },
+    },
+    { new: false }
+  );
 
-  await updateCommunityAlibi(alibiId, {
-    reportCount,
-    exposed: isExposed,
-    credibilityIndex: isExposed
-      ? 0
-      : communityData.alibi.credibilityIndex,
-    penaltyPoints: isExposed ? EXPOSURE_PENALTY : 0,
-    penaltyApplied: isExposed || penaltyWasApplied,
-  });
+  if (previous) {
+    await applyCredibilityChange(previous.owner, EXPOSURE_PENALTY);
+    return { reportCount, isExposed: true, penaltyApplied: true };
+  }
 
-  return { reportCount, isExposed, penaltyApplied };
+  await Alibi.updateOne({ _id: alibiId }, { reportCount });
+  return { reportCount, isExposed: true, penaltyApplied: false };
 }
