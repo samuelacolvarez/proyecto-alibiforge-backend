@@ -1,3 +1,37 @@
+import swaggerJsdoc from "swagger-jsdoc";
+
+const options = {
+  definition: {
+    openapi: "3.0.0",
+    info: {
+      title: "AlibiForge API — Identidad y Coartadas (Persona A)",
+      version: "1.0.0",
+      description:
+        "Endpoints de autenticación, perfil, coartadas y cadena de testigos.",
+    },
+    servers: [
+      {
+        url: `http://localhost:${process.env.PORT || 4000}`,
+        description: "Servidor local",
+      },
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: "http",
+          scheme: "bearer",
+          bearerFormat: "JWT",
+        },
+      },
+    },
+    security: [{ bearerAuth: [] }],
+  },
+  apis: ["./src/routes/*.js"],
+};
+
+export const swaggerSpec = swaggerJsdoc(options);
+
+// Documentación del módulo de Persona B (situaciones, votos, reportes, rankings)
 export const swaggerDocument = {
   openapi: "3.0.3",
   info: {
