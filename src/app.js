@@ -1,5 +1,7 @@
 import express from "express";
 import cors from "cors";
+import swaggerUi from "swagger-ui-express";
+import { swaggerSpec } from "./config/swagger.js";
 
 import authRoutes from "./routes/authRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
@@ -23,6 +25,7 @@ export function createApp() {
   app.use("/users", userRoutes);
   app.use("/alibis", alibiRoutes);
 
+  app.use("/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
   app.use(notFoundHandler);
   app.use(errorHandler);
 
