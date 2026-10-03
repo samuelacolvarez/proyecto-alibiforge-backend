@@ -1,17 +1,30 @@
 import { Alibi } from "../models/Alibi.js";
 import { AlibiDetail } from "../models/AlibiDetail.js";
+import { Situation } from "../models/Situation.js";
+import { Witness } from "../models/Witness.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { ALIBI_STATES, ALIBI_STATE_VALUES, STORY_MAX_CHARS } from "../utils/constants.js";
 import {
+  ALIBI_STATES,
+  ALIBI_STATE_VALUES,
+  REVIEW_DECISIONS,
+  STORY_MAX_CHARS,
+} from "../utils/constants.js";
+import {
+  addVersionSnapshot,
   assertCanSubmit,
   assertValidTransition,
+  normalizeDetails,
   recalculateAlibiCounters,
+  resolveWitnessUsers,
 } from "../services/alibiService.js";
 
+const HEX_ID = /^[0-9a-fA-F]{24}$/;
+
 // Arma la respuesta que espera el frontend: la coartada + sus detalles
+// como array de strings (así lo consume DetailList).
 async function serializeAlibi(alibi) {
-  const details = await AlibiDetail.find({ alibi: alibi.id }).sort({ createdAt: 1 });
+  const details = await AlibiDetail.find({ alibi: alibi.id }).sort({ createdAt: 1, _id: 1 });
   return { ...alibi.toJSON(), details: details.map((d) => d.text) };
 }
 
@@ -22,7 +35,19 @@ function assertOwner(alibi, user) {
   }
 }
 
+// Si el cliente manda situationId, la situación tiene que existir.
+async function resolveSituation(situationId) {
+  if (situationId === undefined || situationId === null || situationId === "") return null;
+  if (!HEX_ID.test(String(situationId))) {
+    throw ApiError.badRequest("situationId inválido.");
+  }
+  const situation = await Situation.findById(situationId);
+  if (!situation) throw ApiError.notFound("La situación indicada no existe.");
+  return situation;
+}
+
 // POST /alibis
+// Body: { title, situation, story, details?: string[], witnesses?: (id|alias)[], situationId? }
 export const createAlibi = asyncHandler(async (req, res) => {
   if (req.user.isBlocked()) {
     throw ApiError.forbidden(
@@ -30,23 +55,44 @@ export const createAlibi = asyncHandler(async (req, res) => {
     );
   }
 
-  const { title, situation, story } = req.body;
-  if (!title || !situation || !story) {
+  const { title, story } = req.body;
+  const situationDoc = await resolveSituation(req.body.situationId);
+  const situationText =
+    (typeof req.body.situation === "string" && req.body.situation.trim()) ||
+    situationDoc?.title;
+
+  if (!title || !situationText || !story) {
     throw ApiError.badRequest("Título, situación e historia son obligatorios.");
   }
   if (story.length > STORY_MAX_CHARS) {
     throw ApiError.badRequest(`La historia no puede superar los ${STORY_MAX_CHARS} caracteres.`);
   }
 
+  // Se valida todo antes de escribir, para no dejar coartadas a medias.
+  const details = normalizeDetails(req.body.details);
+  const witnessUsers = await resolveWitnessUsers(req.body.witnesses, req.user.id);
+
   const alibi = await Alibi.create({
     title,
-    situation,
+    situation: situationText,
     story,
     owner: req.user.id,
+    situationId: situationDoc?._id ?? null,
     state: ALIBI_STATES.DRAFT,
   });
 
-  res.status(201).json(await serializeAlibi(alibi));
+  if (details.length > 0) {
+    await AlibiDetail.insertMany(details.map((text) => ({ alibi: alibi._id, text })));
+  }
+  if (witnessUsers.length > 0) {
+    await Witness.insertMany(witnessUsers.map((user) => ({ alibi: alibi._id, user: user._id })));
+  }
+
+  await recalculateAlibiCounters(alibi.id);
+  await addVersionSnapshot(alibi.id);
+
+  const created = await Alibi.findById(alibi.id);
+  res.status(201).json(await serializeAlibi(created));
 });
 
 // GET /alibis?owner=me&state=Draft&limit=6
@@ -80,6 +126,23 @@ export const getAlibi = asyncHandler(async (req, res) => {
   res.json(await serializeAlibi(alibi));
 });
 
+// GET /alibis/:id/versions  (req. 3: múltiples versiones)
+export const listVersions = asyncHandler(async (req, res) => {
+  const alibi = await Alibi.findById(req.params.id);
+  if (!alibi) throw ApiError.notFound("Coartada no encontrada.");
+
+  res.json(
+    alibi.versions.map((v) => ({
+      number: v.number,
+      title: v.title,
+      situation: v.situation,
+      story: v.story,
+      details: v.details,
+      createdAt: v.createdAt,
+    }))
+  );
+});
+
 // PUT /alibis/:id  (solo mientras es Draft)
 export const updateAlibi = asyncHandler(async (req, res) => {
   const alibi = await Alibi.findById(req.params.id);
@@ -91,6 +154,8 @@ export const updateAlibi = asyncHandler(async (req, res) => {
   }
 
   const { title, situation, story, details } = req.body;
+  const cleanDetails = Array.isArray(details) ? normalizeDetails(details) : undefined;
+
   if (title) alibi.title = title;
   if (situation) alibi.situation = situation;
   if (story) {
@@ -102,14 +167,19 @@ export const updateAlibi = asyncHandler(async (req, res) => {
   await alibi.save();
 
   // Si el front manda el array completo de detalles, se reemplazan todos.
-  if (Array.isArray(details)) {
+  if (cleanDetails) {
     await AlibiDetail.deleteMany({ alibi: alibi.id });
-    if (details.length > 0) {
+    if (cleanDetails.length > 0) {
       await AlibiDetail.insertMany(
-        details.map((text) => ({ alibi: alibi.id, text }))
+        cleanDetails.map((text) => ({ alibi: alibi.id, text }))
       );
     }
-    await recalculateAlibiCounters(alibi.id);
+  }
+  await recalculateAlibiCounters(alibi.id);
+
+  // Cada edición del borrador deja una versión nueva.
+  if (title || situation || story || cleanDetails) {
+    await addVersionSnapshot(alibi.id);
   }
 
   const updated = await Alibi.findById(alibi.id);
@@ -126,6 +196,28 @@ export const submitAlibi = asyncHandler(async (req, res) => {
   await assertCanSubmit(alibi.id);
 
   alibi.state = ALIBI_STATES.SUBMITTED;
+  await alibi.save();
+
+  res.json(await serializeAlibi(alibi));
+});
+
+// POST /alibis/:id/review   Body: { decision: "review" | "approve" | "reject" }
+// Cualquier usuario autenticado que NO sea el dueño. La state machine valida el paso.
+export const reviewAlibi = asyncHandler(async (req, res) => {
+  const alibi = await Alibi.findById(req.params.id);
+  if (!alibi) throw ApiError.notFound("Coartada no encontrada.");
+
+  if (alibi.owner.toString() === req.user.id) {
+    throw ApiError.forbidden("No puedes revisar tu propia coartada.");
+  }
+
+  const target = REVIEW_DECISIONS[req.body.decision];
+  if (!target) {
+    throw ApiError.badRequest('decision debe ser "review", "approve" o "reject".');
+  }
+
+  assertValidTransition(alibi.state, target);
+  alibi.state = target;
   await alibi.save();
 
   res.json(await serializeAlibi(alibi));

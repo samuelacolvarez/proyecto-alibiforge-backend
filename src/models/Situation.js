@@ -1,66 +1,7 @@
 import mongoose from "mongoose";
+import { idOf } from "../utils/ids.js";
 
-const communityAlibiSchema = new mongoose.Schema(
-  {
-    externalId: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    title: {
-      type: String,
-      required: true,
-      trim: true,
-      maxlength: 120,
-    },
-    story: {
-      type: String,
-      required: true,
-      trim: true,
-      maxlength: 500,
-    },
-    creatorId: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    creatorAlias: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-    witnessCount: {
-      type: Number,
-      min: 0,
-      default: 0,
-    },
-    credibilityIndex: {
-      type: Number,
-      min: 0,
-      max: 5,
-      default: 0,
-    },
-    exposed: {
-      type: Boolean,
-      default: false,
-    },
-    reportCount: {
-      type: Number,
-      min: 0,
-      default: 0,
-    },
-    penaltyPoints: {
-      type: Number,
-      default: 0,
-    },
-    penaltyApplied: {
-      type: Boolean,
-      default: false,
-    },
-  },
-  { _id: false }
-);
-
+// Foro de "situaciones de riesgo". 
 const situationSchema = new mongoose.Schema(
   {
     title: {
@@ -75,15 +16,26 @@ const situationSchema = new mongoose.Schema(
       trim: true,
       maxlength: 1000,
     },
-    alibis: {
-      type: [communityAlibiSchema],
-      default: [],
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
     },
   },
   { timestamps: true }
 );
 
 situationSchema.index({ title: "text" });
-situationSchema.index({ "alibis.externalId": 1 }, { unique: true, sparse: true });
+
+situationSchema.set("toJSON", {
+  virtuals: true,
+  versionKey: false,
+  transform: (_doc, ret) => {
+    ret.id = ret._id.toString();
+    ret.createdBy = idOf(ret.createdBy) ?? null;
+    delete ret._id;
+    return ret;
+  },
+});
 
 export const Situation = mongoose.model("Situation", situationSchema);

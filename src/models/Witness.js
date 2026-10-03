@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { idOf } from "../utils/ids.js";
 
 // Definimos la estructura de un Witness
 const witnessSchema = new mongoose.Schema(
@@ -32,12 +33,9 @@ witnessSchema.set("toJSON", {
   versionKey: false,
 
   transform: (doc, ret) => {
-    // Obtenemos el ID del usuario
-    if (ret.user?._id) {
-      ret.id = ret.user._id.toString();
-    } else {
-      ret.id = ret.user?.toString();
-    }
+    // Con populate("user", "alias"), Mongoose ya serializó el usuario con su
+    // propio toJSON (trae `id`, no `_id`). idOf() maneja ambos casos.
+    ret.id = idOf(ret.user);
 
     // Guardamos el ID también como userId
     ret.userId = ret.id;
@@ -55,4 +53,3 @@ witnessSchema.set("toJSON", {
 });
 
 export const Witness = mongoose.model("Witness", witnessSchema);
-
