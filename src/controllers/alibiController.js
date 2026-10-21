@@ -227,3 +227,24 @@ export const reviewAlibi = asyncHandler(async (req, res) => {
 
   res.json(await serializeAlibi(alibi));
 });
+
+// POST /alibis/:id/details
+export const addDetail = asyncHandler(async (req, res) => {
+  const alibi = await Alibi.findById(req.params.id);
+  if (!alibi) throw ApiError.notFound("Coartada no encontrada.");
+  assertOwner(alibi, req.user);
+
+  if (alibi.state !== ALIBI_STATES.DRAFT) {
+    throw ApiError.badRequest("Solo se pueden agregar detalles a un borrador.");
+  }
+
+  const text = req.body.detail ?? req.body.text;
+  if (!text || !text.trim()) {
+    throw ApiError.badRequest("El detalle no puede estar vacío.");
+  }
+
+  await AlibiDetail.create({ alibi: alibi.id, text: text.trim() });
+  const updated = await recalculateAlibiCounters(alibi.id);
+
+  res.status(201).json(await serializeAlibi(updated));
+});
