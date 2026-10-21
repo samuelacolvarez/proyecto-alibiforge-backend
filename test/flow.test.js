@@ -194,7 +194,7 @@ test("la revisión sigue la máquina de estados", async () => {
 
   const approved = await api(`/alibis/${ids.alibiAna}/review`, {
     method: "POST",
-    token: tokens.bruno,
+    token: tokens.dario,
     body: { decision: "approve" },
   });
   assert.equal(approved.status, 200);
@@ -202,7 +202,7 @@ test("la revisión sigue la máquina de estados", async () => {
 
   const again = await api(`/alibis/${ids.alibiAna}/review`, {
     method: "POST",
-    token: tokens.bruno,
+    token: tokens.dario,
     body: { decision: "review" },
   });
   assert.equal(again.status, 400);
