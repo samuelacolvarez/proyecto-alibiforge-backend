@@ -360,3 +360,18 @@ test("las situaciones listan sus coartadas ordenadas por índice y aceptan petic
   });
   assert.equal(repeated.status, 409);
 });
+
+test("quien deserta no puede volver a unirse y un testigo no puede revisar la coartada", async () => {
+  const rejoin = await api(`/alibis/${ids.alibiCarla}/witnesses`, {
+    method: "POST",
+    token: tokens.dario,
+  });
+  assert.equal(rejoin.status, 409);
+
+  const witnessReview = await api(`/alibis/${ids.alibiCarla}/review`, {
+    method: "POST",
+    token: tokens.elena,
+    body: { decision: "approve" },
+  });
+  assert.equal(witnessReview.status, 403);
+});
