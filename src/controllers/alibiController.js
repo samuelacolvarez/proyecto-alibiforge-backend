@@ -201,14 +201,19 @@ export const submitAlibi = asyncHandler(async (req, res) => {
   res.json(await serializeAlibi(alibi));
 });
 
-// POST /alibis/:id/review   Body: { decision: "review" | "approve" | "reject" }
-// Cualquier usuario autenticado que NO sea el dueño. La state machine valida el paso.
+/// POST /alibis/:id/review   Body: { decision: "review" | "approve" | "reject" }
+// Cualquier usuario autenticado que NO sea el dueño ni uno de sus testigos.
 export const reviewAlibi = asyncHandler(async (req, res) => {
   const alibi = await Alibi.findById(req.params.id);
   if (!alibi) throw ApiError.notFound("Coartada no encontrada.");
 
   if (alibi.owner.toString() === req.user.id) {
     throw ApiError.forbidden("No puedes revisar tu propia coartada.");
+  }
+
+  const isWitness = await Witness.exists({ alibi: alibi._id, user: req.user._id });
+  if (isWitness) {
+    throw ApiError.forbidden("Los testigos de la coartada no pueden revisarla.");
   }
 
   const target = REVIEW_DECISIONS[req.body.decision];
@@ -221,25 +226,4 @@ export const reviewAlibi = asyncHandler(async (req, res) => {
   await alibi.save();
 
   res.json(await serializeAlibi(alibi));
-});
-
-// POST /alibis/:id/details
-export const addDetail = asyncHandler(async (req, res) => {
-  const alibi = await Alibi.findById(req.params.id);
-  if (!alibi) throw ApiError.notFound("Coartada no encontrada.");
-  assertOwner(alibi, req.user);
-
-  if (alibi.state !== ALIBI_STATES.DRAFT) {
-    throw ApiError.badRequest("Solo se pueden agregar detalles a un borrador.");
-  }
-
-  const text = req.body.detail ?? req.body.text;
-  if (!text || !text.trim()) {
-    throw ApiError.badRequest("El detalle no puede estar vacío.");
-  }
-
-  await AlibiDetail.create({ alibi: alibi.id, text: text.trim() });
-  const updated = await recalculateAlibiCounters(alibi.id);
-
-  res.status(201).json(await serializeAlibi(updated));
 });
