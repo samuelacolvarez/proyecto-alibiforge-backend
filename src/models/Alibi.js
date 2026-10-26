@@ -41,6 +41,9 @@ const alibiSchema = new mongoose.Schema(
     penaltyApplied: { type: Boolean, default: false },
 
     versions: { type: [versionSchema], default: [] },
+    // Usuarios que desertaron de la cadena: no pueden volver a unirse (evita
+    // repetir unirse/desertar para penalizar al dueño una y otra vez).
+    defectors: { type: [mongoose.Schema.Types.ObjectId], default: [] },
   },
   { timestamps: true }
 );
@@ -58,6 +61,7 @@ alibiSchema.set("toJSON", {
     delete ret._id;
     delete ret.owner;
     delete ret.versions;
+    delete ret.defectors;
     return ret;
   },
 });

@@ -30,6 +30,10 @@ export const joinChain = asyncHandler(async (req, res) => {
     throw ApiError.badRequest("No puedes sumarte a una coartada rechazada.");
   }
 
+  if (alibi.defectors.some((id) => id.toString() === req.user.id)) {
+    throw ApiError.conflict("Ya desertaste de esta cadena y no puedes volver a unirte.");
+  }
+
   const already = await Witness.findOne({ alibi: alibi.id, user: req.user.id });
   if (already) {
     throw ApiError.conflict("Ya eres testigo de esta coartada.");
@@ -54,6 +58,11 @@ export const defectFromChain = asyncHandler(async (req, res) => {
   if (!deleted) {
     throw ApiError.notFound("No eres testigo de esta coartada.");
   }
+
+  await Alibi.updateOne(
+    { _id: req.params.id },
+    { $addToSet: { defectors: req.user._id } }
+  );
 
   // Al defectar cambia witnessCount, que es lo que lee el Credibility Index.
   await recalculateAlibiCounters(req.params.id);

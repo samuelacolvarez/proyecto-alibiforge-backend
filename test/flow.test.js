@@ -194,7 +194,7 @@ test("la revisión sigue la máquina de estados", async () => {
 
   const approved = await api(`/alibis/${ids.alibiAna}/review`, {
     method: "POST",
-    token: tokens.bruno,
+    token: tokens.dario,
     body: { decision: "approve" },
   });
   assert.equal(approved.status, 200);
@@ -202,7 +202,7 @@ test("la revisión sigue la máquina de estados", async () => {
 
   const again = await api(`/alibis/${ids.alibiAna}/review`, {
     method: "POST",
-    token: tokens.bruno,
+    token: tokens.dario,
     body: { decision: "review" },
   });
   assert.equal(again.status, 400);
@@ -359,4 +359,19 @@ test("las situaciones listan sus coartadas ordenadas por índice y aceptan petic
     body: {},
   });
   assert.equal(repeated.status, 409);
+});
+
+test("quien deserta no puede volver a unirse y un testigo no puede revisar la coartada", async () => {
+  const rejoin = await api(`/alibis/${ids.alibiCarla}/witnesses`, {
+    method: "POST",
+    token: tokens.dario,
+  });
+  assert.equal(rejoin.status, 409);
+
+  const witnessReview = await api(`/alibis/${ids.alibiCarla}/review`, {
+    method: "POST",
+    token: tokens.elena,
+    body: { decision: "approve" },
+  });
+  assert.equal(witnessReview.status, 403);
 });
