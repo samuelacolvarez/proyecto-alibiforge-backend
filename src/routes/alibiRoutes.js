@@ -98,18 +98,6 @@ router.post("/", requireAuth, createAlibi);
  *         name: id
  *         required: true
  *         schema: { type: string }
- *   delete:
- *     summary: Eliminar una coartada (solo borradores del dueño)
- *     tags: [Alibis]
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *     responses:
- *       200: { description: Coartada eliminada }
- *       400: { description: Solo se pueden eliminar borradores }
- *       403: { description: No eres el dueño }
  *     requestBody:
  *       content:
  *         application/json:
@@ -124,7 +112,19 @@ router.post("/", requireAuth, createAlibi);
  *                 items: { type: string }
  *     responses:
  *       200: { description: Coartada actualizada }
- *       403: { description: No sos el dueño }
+ *       403: { description: No eres el dueño }
+ *   delete:
+ *     summary: Eliminar una coartada (solo borradores del dueño)
+ *     tags: [Alibis]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Coartada eliminada }
+ *       400: { description: Solo se pueden eliminar borradores }
+ *       403: { description: No eres el dueño }
  */
 router.get("/:id", getAlibi);
 router.put("/:id", requireAuth, updateAlibi);
