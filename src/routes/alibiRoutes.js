@@ -8,6 +8,7 @@ import {
   addDetail,
   listVersions,
   reviewAlibi,
+  deleteAlibi,
 } from "../controllers/alibiController.js";
 import {
   listWitnesses,
@@ -15,6 +16,7 @@ import {
   defectFromChain,
 } from "../controllers/witnessController.js";
 import { requireAuth, optionalAuth } from "../middleware/auth.js";
+
 
 const router = Router();
 
@@ -96,6 +98,18 @@ router.post("/", requireAuth, createAlibi);
  *         name: id
  *         required: true
  *         schema: { type: string }
+ *   delete:
+ *     summary: Eliminar una coartada (solo borradores del dueño)
+ *     tags: [Alibis]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Coartada eliminada }
+ *       400: { description: Solo se pueden eliminar borradores }
+ *       403: { description: No eres el dueño }
  *     requestBody:
  *       content:
  *         application/json:
@@ -114,6 +128,7 @@ router.post("/", requireAuth, createAlibi);
  */
 router.get("/:id", getAlibi);
 router.put("/:id", requireAuth, updateAlibi);
+router.delete("/:id", requireAuth, deleteAlibi);
 
 /**
  * @swagger

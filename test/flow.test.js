@@ -375,3 +375,41 @@ test("quien deserta no puede volver a unirse y un testigo no puede revisar la co
   });
   assert.equal(witnessReview.status, 403);
 });
+test("solo el dueño puede eliminar un borrador y las coartadas enviadas no se eliminan", async () => {
+  const created = await api("/alibis", {
+    method: "POST",
+    token: tokens.dario,
+    body: {
+      title: "Borrador a eliminar",
+      situation: "Prueba",
+      story: "Historia corta.",
+      details: threeDetails,
+    },
+  });
+  assert.equal(created.status, 201);
+  const draftId = created.body.id;
+
+  const byOther = await api(`/alibis/${draftId}`, { method: "DELETE", token: tokens.bruno });
+  assert.equal(byOther.status, 403);
+
+  const deleted = await api(`/alibis/${draftId}`, { method: "DELETE", token: tokens.dario });
+  assert.equal(deleted.status, 200);
+
+  const gone = await api(`/alibis/${draftId}`);
+  assert.equal(gone.status, 404);
+
+  const second = await api("/alibis", {
+    method: "POST",
+    token: tokens.dario,
+    body: {
+      title: "Ya enviada",
+      situation: "Prueba",
+      story: "Historia corta.",
+      details: threeDetails,
+    },
+  });
+  await api(`/alibis/${second.body.id}/submit`, { method: "POST", token: tokens.dario });
+
+  const submitted = await api(`/alibis/${second.body.id}`, { method: "DELETE", token: tokens.dario });
+  assert.equal(submitted.status, 400);
+});
