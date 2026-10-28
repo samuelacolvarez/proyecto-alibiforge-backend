@@ -3,7 +3,7 @@ import http from "node:http";
 import { Server } from "socket.io";
 import { createApp } from "./app.js";
 import { connectDB } from "./config/db.js";
-import { registrarSockets } from "./sockets/index.js";
+import { registrarSockets } from "./socket/index.js";
 
 const PORT = process.env.PORT || 4000;
 

@@ -248,3 +248,22 @@ export const addDetail = asyncHandler(async (req, res) => {
 
   res.status(201).json(await serializeAlibi(updated));
 });
+
+// DELETE /alibis/:id  (solo borradores del dueño)
+export const deleteAlibi = asyncHandler(async (req, res) => {
+  const alibi = await Alibi.findById(req.params.id);
+  if (!alibi) throw ApiError.notFound("Coartada no encontrada.");
+  assertOwner(alibi, req.user);
+
+  if (alibi.state !== ALIBI_STATES.DRAFT) {
+    throw ApiError.badRequest("Solo se pueden eliminar coartadas en estado Borrador.");
+  }
+
+  await Promise.all([
+    AlibiDetail.deleteMany({ alibi: alibi._id }),
+    Witness.deleteMany({ alibi: alibi._id }),
+  ]);
+  await alibi.deleteOne();
+
+  res.json({ message: "Coartada eliminada.", id: alibi.id });
+});
