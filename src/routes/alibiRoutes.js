@@ -114,7 +114,7 @@ router.post("/", requireAuth, createAlibi);
  *       200: { description: Coartada actualizada }
  *       403: { description: No eres el dueño }
  *   delete:
- *     summary: Eliminar una coartada (solo borradores del dueño)
+ *     summary: Eliminar una coartada (el dueño, solo borradores; el administrador, cualquiera)
  *     tags: [Alibis]
  *     parameters:
  *       - in: path
@@ -124,7 +124,7 @@ router.post("/", requireAuth, createAlibi);
  *     responses:
  *       200: { description: Coartada eliminada }
  *       400: { description: Solo se pueden eliminar borradores }
- *       403: { description: No eres el dueño }
+ *       403: { description: No eres el dueño ni administrador }
  */
 router.get("/:id", getAlibi);
 router.put("/:id", requireAuth, updateAlibi);

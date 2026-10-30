@@ -32,6 +32,15 @@ export async function requireAuth(req, _res, next) {
   }
 }
 
+export function requireRole(...roles) {
+  return (req, _res, next) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      return next(ApiError.forbidden("No tienes permisos para esta acción."));
+    }
+    next();
+  };
+}
+
 // Nos sirve para endpoints públicos que muestran algo extra si hay sesión.
 export async function optionalAuth(req, _res, next) {
   const header = req.headers.authorization || "";

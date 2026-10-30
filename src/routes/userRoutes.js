@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { getMe, updateMe } from "../controllers/userController.js";
-import { requireAuth } from "../middleware/auth.js";
+import { getMe, updateMe, listUsers } from "../controllers/userController.js";
+import { requireAuth, requireRole } from "../middleware/auth.js";
 
 const router = Router();
 
@@ -22,6 +22,18 @@ const router = Router();
  *       401: { description: No autenticado }
  */
 router.get("/me", requireAuth, getMe);
+
+/**
+ * @swagger
+ * /users:
+ *   get:
+ *     summary: Listar todos los usuarios (solo administrador)
+ *     tags: [Users]
+ *     responses:
+ *       200: { description: Lista de usuarios }
+ *       403: { description: No eres administrador }
+ */
+router.get("/", requireAuth, requireRole("admin"), listUsers);
 
 /**
  * @swagger

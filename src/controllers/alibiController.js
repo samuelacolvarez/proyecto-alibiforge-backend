@@ -1,6 +1,8 @@
 import { Alibi } from "../models/Alibi.js";
 import { AlibiDetail } from "../models/AlibiDetail.js";
+import { ExposureReport } from "../models/ExposureReport.js";
 import { Situation } from "../models/Situation.js";
+import { Vote } from "../models/Vote.js";
 import { Witness } from "../models/Witness.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -253,15 +255,22 @@ export const addDetail = asyncHandler(async (req, res) => {
 export const deleteAlibi = asyncHandler(async (req, res) => {
   const alibi = await Alibi.findById(req.params.id);
   if (!alibi) throw ApiError.notFound("Coartada no encontrada.");
-  assertOwner(alibi, req.user);
 
-  if (alibi.state !== ALIBI_STATES.DRAFT) {
-    throw ApiError.badRequest("Solo se pueden eliminar coartadas en estado Borrador.");
+  // El administrador puede moderar (eliminar) cualquier coartada.
+  // El dueño solo puede eliminar las suyas mientras sean Borrador.
+  if (req.user.role !== "admin") {
+    assertOwner(alibi, req.user);
+
+    if (alibi.state !== ALIBI_STATES.DRAFT) {
+      throw ApiError.badRequest("Solo se pueden eliminar coartadas en estado Borrador.");
+    }
   }
 
   await Promise.all([
     AlibiDetail.deleteMany({ alibi: alibi._id }),
     Witness.deleteMany({ alibi: alibi._id }),
+    Vote.deleteMany({ alibiId: alibi._id }),
+    ExposureReport.deleteMany({ alibiId: alibi._id }),
   ]);
   await alibi.deleteOne();
 

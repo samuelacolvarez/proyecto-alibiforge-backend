@@ -23,6 +23,8 @@ export const REVIEW_DECISIONS = {
   reject: ALIBI_STATES.REJECTED,
 };
 
+export const ROLES = ["user", "admin"];
+
 export const SPECIALITIES = [
   "CreativeExcuse",
   "DetailOriented",

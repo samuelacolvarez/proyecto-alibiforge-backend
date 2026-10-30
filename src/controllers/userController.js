@@ -8,6 +8,12 @@ export const getMe = asyncHandler(async (req, res) => {
   res.json(req.user.toJSON());
 });
 
+// GET /users (solo administrador)
+export const listUsers = asyncHandler(async (_req, res) => {
+  const users = await User.find().sort({ createdAt: -1 });
+  res.json(users.map((user) => user.toJSON()));
+});
+
 // PUT /users/me
 export const updateMe = asyncHandler(async (req, res) => {
   const { alias, speciality } = req.body;

@@ -211,10 +211,21 @@ async function seed() {
   const byState = {};
   for (const alibi of alibis) byState[alibi.state] = (byState[alibi.state] || 0) + 1;
 
+  console.log("Creando administrador...");
+  const admin = new User({
+    alias: "Admin",
+    email: "admin@alibiforge.com",
+    speciality: "CreativeExcuse",
+    role: "admin",
+  });
+  await admin.setPassword("Admin12345");
+  await admin.save();
+
   console.log(`
 Listo:
   ${guilds.length} guilds
   ${users.length} usuarios (password: password123)
+  1 administrador (admin@alibiforge.com / Admin12345)
   ${alibis.length} coartadas ${JSON.stringify(byState)}
   ${WITNESS_CHAINS.length} cadenas de testigos
   ${votes.length} votos

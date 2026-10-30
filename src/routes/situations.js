@@ -4,7 +4,7 @@ import { Alibi } from "../models/Alibi.js";
 import { AlibiRequest } from "../models/AlibiRequest.js";
 import { Situation } from "../models/Situation.js";
 import { User } from "../models/User.js";
-import { requireAuth } from "../middleware/auth.js";
+import { requireAuth, requireRole } from "../middleware/auth.js";
 import { ApiError } from "../utils/ApiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ACTIVE_STATES } from "../utils/constants.js";
@@ -160,5 +160,27 @@ situationsRouter.get(
     });
 
     res.json(requests.map((request) => request.toJSON()));
+  })
+);
+
+// Solo el administrador puede eliminar una situación.
+// Las coartadas asociadas se conservan, pero quedan sin situación.
+situationsRouter.delete(
+  "/situations/:id",
+  requireAuth,
+  requireRole("admin"),
+  asyncHandler(async (req, res) => {
+    assertSituationId(req.params.id);
+
+    const situation = await Situation.findById(req.params.id);
+    if (!situation) throw ApiError.notFound("Situación no encontrada.");
+
+    await Promise.all([
+      AlibiRequest.deleteMany({ situationId: situation._id }),
+      Alibi.updateMany({ situationId: situation._id }, { $set: { situationId: null } }),
+    ]);
+    await situation.deleteOne();
+
+    res.json({ message: "Situación eliminada.", id: situation.id });
   })
 );

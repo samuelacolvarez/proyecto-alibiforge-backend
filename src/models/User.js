@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import bcrypt from "bcryptjs";
-import { SPECIALITIES } from "../utils/constants.js";
+import { SPECIALITIES, ROLES } from "../utils/constants.js";
 
 const userSchema = new mongoose.Schema(
   {
@@ -23,6 +23,11 @@ const userSchema = new mongoose.Schema(
         type: String, 
         enum: SPECIALITIES, 
         required: true
+    },
+    role: {
+        type: String,
+        enum: ROLES,
+        default: "user"
     },
     credibilityScore: { 
         type: Number, 

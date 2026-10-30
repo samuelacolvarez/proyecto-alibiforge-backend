@@ -3,6 +3,7 @@ import { after, before, test } from "node:test";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import { createApp } from "../src/app.js";
 import { connectDB, disconnectDB } from "../src/config/db.js";
+import { User } from "../src/models/User.js";
 
 // Prueba de flujo completo contra una MongoDB en memoria:
 // registro -> coartada con detalles y testigos -> envío -> votos -> revisión
@@ -412,4 +413,44 @@ test("solo el dueño puede eliminar un borrador y las coartadas enviadas no se e
 
   const submitted = await api(`/alibis/${second.body.id}`, { method: "DELETE", token: tokens.dario });
   assert.equal(submitted.status, 400);
+});
+test("roles: solo el administrador puede moderar y listar usuarios", async () => {
+  await registerAndLogin("admin_test", "Improviser");
+  await User.updateOne({ alias: "admin_test" }, { $set: { role: "admin" } });
+
+  // El usuario estándar tiene rol "user" y no puede listar usuarios.
+  const me = await api("/users/me", { token: tokens.bruno });
+  assert.equal(me.body.role, "user");
+  const forbidden = await api("/users", { token: tokens.bruno });
+  assert.equal(forbidden.status, 403);
+
+  const list = await api("/users", { token: tokens.admin_test });
+  assert.equal(list.status, 200);
+  assert.ok(Array.isArray(list.body));
+
+  // El administrador puede eliminar una coartada que ya fue enviada.
+  const created = await api("/alibis", {
+    method: "POST",
+    token: tokens.dario,
+    body: { title: "Para moderar", situation: "Prueba", story: "Historia corta.", details: threeDetails },
+  });
+  await api(`/alibis/${created.body.id}/submit`, { method: "POST", token: tokens.dario });
+
+  const byUser = await api(`/alibis/${created.body.id}`, { method: "DELETE", token: tokens.bruno });
+  assert.equal(byUser.status, 403);
+  const byAdmin = await api(`/alibis/${created.body.id}`, { method: "DELETE", token: tokens.admin_test });
+  assert.equal(byAdmin.status, 200);
+
+  // Solo el administrador elimina situaciones.
+  const situation = await api("/api/situations", {
+    method: "POST",
+    token: tokens.bruno,
+    body: { title: "Situación de prueba", description: "Descripción de prueba" },
+  });
+  assert.equal(situation.status, 201);
+  const sid = situation.body.situation.id;
+  const noAdmin = await api(`/api/situations/${sid}`, { method: "DELETE", token: tokens.bruno });
+  assert.equal(noAdmin.status, 403);
+  const okAdmin = await api(`/api/situations/${sid}`, { method: "DELETE", token: tokens.admin_test });
+  assert.equal(okAdmin.status, 200);
 });
